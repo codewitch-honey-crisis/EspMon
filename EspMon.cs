@@ -1,13 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Drawing;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO.Ports;
-using OpenHardwareMonitor;
 using OpenHardwareMonitor.Hardware;
 namespace EspMon
 {
@@ -105,7 +99,7 @@ namespace EspMon
                             // store
                             cpuTemp = sensor.Value.GetValueOrDefault();
                             // print to console
-                            System.Diagnostics.Debug.WriteLine("cpuTemp: " + sensor.Value.GetValueOrDefault());
+                            //System.Diagnostics.Debug.WriteLine("cpuTemp: " + sensor.Value.GetValueOrDefault());
 
                         }
                         else if (sensor.SensorType == SensorType.Load && sensor.Name.Contains("CPU Total"))
@@ -113,7 +107,7 @@ namespace EspMon
                             // store
                             cpuUsage = sensor.Value.GetValueOrDefault();
                             // print to console
-                            System.Diagnostics.Debug.WriteLine("cpuUsage: " + sensor.Value.GetValueOrDefault());
+                            //System.Diagnostics.Debug.WriteLine("cpuUsage: " + sensor.Value.GetValueOrDefault());
 
                         }
                         else if (sensor.SensorType == SensorType.Power && sensor.Name.Contains("CPU Package"))
@@ -121,7 +115,7 @@ namespace EspMon
                             // store
                             cpuPowerDrawPackage = sensor.Value.GetValueOrDefault();
                             // print to console
-                            System.Diagnostics.Debug.WriteLine("CPU Power Draw - Package: " + sensor.Value.GetValueOrDefault());
+                           // System.Diagnostics.Debug.WriteLine("CPU Power Draw - Package: " + sensor.Value.GetValueOrDefault());
 
 
                         }
@@ -130,7 +124,7 @@ namespace EspMon
                             // store
                             cpuFrequency = sensor.Value.GetValueOrDefault();
                             // print to console
-                            System.Diagnostics.Debug.WriteLine("cpuFrequency: " + sensor.Value.GetValueOrDefault());
+                           // System.Diagnostics.Debug.WriteLine("cpuFrequency: " + sensor.Value.GetValueOrDefault());
                         }
                 }
 
@@ -148,28 +142,28 @@ namespace EspMon
                             // store
                             gpuTemp = sensor.Value.GetValueOrDefault();
                             // print to console
-                            System.Diagnostics.Debug.WriteLine("gpuTemp: " + sensor.Value.GetValueOrDefault());
+                            //System.Diagnostics.Debug.WriteLine("gpuTemp: " + sensor.Value.GetValueOrDefault());
                         }
                         else if (sensor.SensorType == SensorType.Load && sensor.Name.Contains("GPU Core"))
                         {
                             // store
                             gpuUsage = sensor.Value.GetValueOrDefault();
                             // print to console
-                            System.Diagnostics.Debug.WriteLine("gpuUsage: " + sensor.Value.GetValueOrDefault());
+                            //System.Diagnostics.Debug.WriteLine("gpuUsage: " + sensor.Value.GetValueOrDefault());
                         }
                         else if (sensor.SensorType == SensorType.Clock && sensor.Name.Contains("GPU Core"))
                         {
                             // store
                             gpuCoreFrequency = sensor.Value.GetValueOrDefault();
                             // print to console
-                            System.Diagnostics.Debug.WriteLine("gpuCoreFrequency: " + sensor.Value.GetValueOrDefault());
+                           // System.Diagnostics.Debug.WriteLine("gpuCoreFrequency: " + sensor.Value.GetValueOrDefault());
                         }
                         else if (sensor.SensorType == SensorType.Clock && sensor.Name.Contains("GPU Memory"))
                         {
                             // store
                             gpuMemoryFrequency = sensor.Value.GetValueOrDefault();
                             // print to console
-                            System.Diagnostics.Debug.WriteLine("gpuMemoryFrequency: " + sensor.Value.GetValueOrDefault());
+                           // System.Diagnostics.Debug.WriteLine("gpuMemoryFrequency: " + sensor.Value.GetValueOrDefault());
                         }
 
                 }
@@ -194,7 +188,6 @@ namespace EspMon
 
 		private void _port_DataReceived(object sender, SerialDataReceivedEventArgs e)
 		{
-            System.Diagnostics.Debug.WriteLine("Data received");
             if (_port!=null && _port.IsOpen)
             {
                 var cha = new byte[1];
@@ -209,11 +202,30 @@ namespace EspMon
                     if ((char)cha[0] == '#')
                     {
                         var ba = BitConverter.GetBytes(cpuUsage);
+                        if(!BitConverter.IsLittleEndian)
+						{
+                            Array.Reverse(ba);
+						}
+                        _port.Write(ba, 0, ba.Length);
+                        ba = BitConverter.GetBytes(cpuTemp);
+                        if (!BitConverter.IsLittleEndian)
+                        {
+                            Array.Reverse(ba);
+                        }
                         _port.Write(ba, 0, ba.Length);
                         ba = BitConverter.GetBytes(gpuUsage);
+                        if (!BitConverter.IsLittleEndian)
+                        {
+                            Array.Reverse(ba);
+                        }
+                        _port.Write(ba, 0, ba.Length);
+                        ba = BitConverter.GetBytes(gpuTemp);
+                        if (!BitConverter.IsLittleEndian)
+                        {
+                            Array.Reverse(ba);
+                        }
                         _port.Write(ba, 0, ba.Length);
                         _port.BaseStream.Flush();
-                        System.Diagnostics.Debug.WriteLine("Serial sent");
                     }
                 }
             }
