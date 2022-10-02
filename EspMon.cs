@@ -20,7 +20,9 @@ namespace EspMon
 		public EspMon()
 		{
 			InitializeComponent();
-			RefreshPortList();
+            Notify.Icon = System.Drawing.SystemIcons.Information;
+            Show();
+            RefreshPortList();
             _computer.Open();
 		}
 		protected override void OnClosed(EventArgs e)
@@ -87,26 +89,31 @@ namespace EspMon
                 {
                     hardware.Update();
                     foreach (var sensor in hardware.Sensors)
-                        if (sensor.SensorType == SensorType.Temperature && sensor.Name.Contains("CPU Package"))
+                        if (sensor.SensorType == SensorType.Temperature &&
+                            sensor.Name.Contains("CPU Package"))
                         {
                             cpuTemp = sensor.Value.GetValueOrDefault();
                         }
-                        else if (sensor.SensorType == SensorType.Load && sensor.Name.Contains("CPU Total"))
+                        else if (sensor.SensorType == SensorType.Load && 
+                            sensor.Name.Contains("CPU Total"))
                         {
                             cpuUsage = sensor.Value.GetValueOrDefault();
                         }
                 }
 
                 // Targets AMD & Nvidia GPUS
-                if (hardware.HardwareType == HardwareType.GpuAti || hardware.HardwareType == HardwareType.GpuNvidia)
+                if (hardware.HardwareType == HardwareType.GpuAti ||
+                    hardware.HardwareType == HardwareType.GpuNvidia)
                 {
                     hardware.Update();
                     foreach (var sensor in hardware.Sensors)
-                        if (sensor.SensorType == SensorType.Temperature && sensor.Name.Contains("GPU Core"))
+                        if (sensor.SensorType == SensorType.Temperature && 
+                            sensor.Name.Contains("GPU Core"))
                         {
                             gpuTemp = sensor.Value.GetValueOrDefault();
                         }
-                        else if (sensor.SensorType == SensorType.Load && sensor.Name.Contains("GPU Core"))
+                        else if (sensor.SensorType == SensorType.Load && 
+                            sensor.Name.Contains("GPU Core"))
                         {
                             gpuUsage = sensor.Value.GetValueOrDefault();
                         }
@@ -136,6 +143,13 @@ namespace EspMon
                 {
                     var ba = new byte[_port.BytesToRead];
                     _port.Read(ba, 0, ba.Length);
+                    if (Created && !Disposing)
+                    {
+                        Invoke(new Action(() =>
+                        {
+                            Log.AppendText(Encoding.ASCII.GetString(ba));
+                        }));
+                    }
                 }
                 else
                 {
@@ -171,5 +185,22 @@ namespace EspMon
                 }
             }
         }
-	}
+
+		private void EspMon_Resize(object sender, EventArgs e)
+		{
+            if(WindowState==FormWindowState.Minimized)
+			{
+                Hide();
+                Notify.Visible = true;
+			}
+		}
+
+		private void Notify_Click(object sender, EventArgs e)
+		{
+            Show();
+            Size = MinimumSize;
+            WindowState = FormWindowState.Normal;
+            Activate();
+        }
+    }
 }
