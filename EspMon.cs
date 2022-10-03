@@ -207,7 +207,6 @@ namespace EspMon
                             Array.Reverse(ba);
                         }
                         _port.Write(ba, 0, ba.Length);
-                        //System.Diagnostics.Debug.WriteLine(_container.Data[PartType.GraphicsCard][MetricType.Temperature]);
                         ba = BitConverter.GetBytes(gpuTemp);
                         if (!BitConverter.IsLittleEndian)
                         {
@@ -218,8 +217,7 @@ namespace EspMon
                     } else if((char)cha[0]=='@')
 					{
                         var ba = BitConverter.GetBytes(cpuSpeed);
-                        System.Diagnostics.Debug.WriteLine(cpuSpeed);
-
+                        
                         if (!BitConverter.IsLittleEndian)
                         {
                             Array.Reverse(ba);
