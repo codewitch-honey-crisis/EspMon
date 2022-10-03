@@ -21,6 +21,91 @@ namespace EspMon
         FrequencyHz,
         VideoMemoryFrequencyHz
     }
+
+    public static class Extensions
+    {
+        public static PartType? ToPartType(this HardwareType hardwareType)
+        {
+            switch (hardwareType)
+            {
+                case HardwareType.GpuAti:
+                case HardwareType.GpuNvidia:
+                    return PartType.GraphicsCard;
+                case HardwareType.CPU:
+                    return PartType.Processor;
+                case HardwareType.RAM:
+                    return PartType.Memory;
+                default:
+                    return null;
+            }
+        }
+
+        public static MetricType? ToMetricType(this ISensor sensor)
+        {
+            var partType = sensor.Hardware.HardwareType.ToPartType();
+
+            switch (sensor.SensorType)
+            {
+                case SensorType.Temperature:
+                    return MetricType.Temperature;
+                case SensorType.Load:
+                    switch (partType)
+                    {
+                        case PartType.Processor:
+                            if (sensor.Name.Contains("CPU Package"))
+                            {
+                                return MetricType.UsagePercentage;
+                            }
+
+                            return null;
+                        default:
+                            return MetricType.UsagePercentage;
+                    }
+                case SensorType.Clock:
+                    switch (partType)
+                    {
+                        case PartType.GraphicsCard:
+                            if (sensor.Name.Contains("Core"))
+                            {
+                                return MetricType.FrequencyHz;
+                            }
+
+                            if (sensor.Name.Contains("Memory"))
+                            {
+                                return MetricType.VideoMemoryFrequencyHz;
+                            }
+
+                            return null;
+                        case PartType.Processor:
+                            if (sensor.Name.Contains("CPU Package"))
+                            {
+                                return MetricType.FrequencyHz;
+                            }
+
+                            return null;
+                        case PartType.Memory:
+                            return MetricType.FrequencyHz;
+                        default:
+                            return null;
+                    }
+                case SensorType.Power:
+                    switch (partType)
+                    {
+                        case PartType.Processor:
+                            if (sensor.Name.Contains("CPU Package"))
+                            {
+                                return MetricType.PowerDrawWatts;
+                            }
+
+                            return null;
+                        default:
+                            return MetricType.PowerDrawWatts;
+                    }
+                default:
+                    return null;
+            }
+        }
+    }
     public class Container
     {
         public Dictionary<PartType, Dictionary<MetricType, float>> Data = new Dictionary<PartType, Dictionary<MetricType, float>>();
@@ -58,16 +143,13 @@ namespace EspMon
     }
     public partial class EspMon : Form
 	{
-        float cpuTemp;
-        float cpuUsage;
-        float gpuTemp;
-        float gpuUsage;
-        SerialPort _port;
-        Container _container = new Container();
-        Computer _computer = new Computer()
+        private SerialPort _port;
+        private readonly Container _container = new Container();
+        private readonly Computer _computer = new Computer
 		{
 			CPUEnabled = true,
-			GPUEnabled = true
+			GPUEnabled = true,
+            RAMEnabled = true
 		};
 		public EspMon()
 		{
@@ -131,78 +213,29 @@ namespace EspMon
 		private void UpdateTimer_Tick(object sender, EventArgs e)
 		{
             CollectSystemInfo();
-            
 		}
         void CollectSystemInfo()
         {
             foreach (var hardware in _computer.Hardware)
             {
-                if (hardware.HardwareType == HardwareType.CPU)
-                {
-                    // only fire the update when found
-                    hardware.Update();
+                var partType = hardware.HardwareType.ToPartType();
 
-                    var metrics = _container.Data[PartType.Processor];
-                    // loop through the data
-                    foreach (var sensor in hardware.Sensors)
-                    {
-                        var value = sensor.Value.GetValueOrDefault();
-                        switch (sensor.SensorType)
-                        {
-                            case SensorType.Temperature:
-                                metrics[MetricType.Temperature] = value;
-                                break;
-                            case SensorType.Load:
-                                metrics[MetricType.UsagePercentage] = value;
-                                break;
-                            case SensorType.Clock:
-                                metrics[MetricType.FrequencyHz] = value;
-                                break;
-                            case SensorType.Power:
-                                metrics[MetricType.PowerDrawWatts] = value;
-                                break;
-                        }
-                    }
+                if (partType == null)
+                {
+                    continue;
                 }
 
+                hardware.Update();
 
-                // Targets AMD & Nvidia GPUS
-                if (hardware.HardwareType == HardwareType.GpuAti || hardware.HardwareType == HardwareType.GpuNvidia)
+                foreach (var sensor in hardware.Sensors)
                 {
-                    // only fire the update when found
-                    hardware.Update();
+                    var metricType = sensor.ToMetricType();
 
-                    var metrics = _container.Data[PartType.GraphicsCard];
-                    // loop through the data
-                    foreach (var sensor in hardware.Sensors)
+                    if (metricType != null)
                     {
-                        var value = sensor.Value.GetValueOrDefault();
-                        switch (sensor.SensorType)
-                        {
-                            case SensorType.Temperature:
-                                metrics[MetricType.Temperature] = value;
-                                break;
-                            case SensorType.Load:
-                                metrics[MetricType.UsagePercentage] = value;
-                                break;
-                            case SensorType.Clock:
-                                if (sensor.Name.Contains("Core"))
-                                {
-                                    metrics[MetricType.FrequencyHz] = value;
-                                }
-                                else if (sensor.Name.Contains("Memory"))
-                                {
-                                    metrics[MetricType.VideoMemoryFrequencyHz] = value;
-                                }
-                                break;
-                            case SensorType.Power:
-                                metrics[MetricType.PowerDrawWatts] = value;
-                                break;
-                        }
+                        _container.Data[partType.Value][metricType.Value] = sensor.Value.GetValueOrDefault();
                     }
                 }
-
-                // ... you can access any other system information you want here
             }
         }
 
