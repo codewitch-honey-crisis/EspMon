@@ -4,152 +4,26 @@ using System.Windows.Forms;
 using System.IO.Ports;
 using OpenHardwareMonitor.Hardware;
 using System.Collections.Generic;
+using System.Management;
+using System.Diagnostics;
+using System.Linq;
 
 namespace EspMon
 {
-    public enum PartType
-    {
-        Processor,
-        GraphicsCard,
-        Memory
-    }
-    public enum MetricType
-    {
-        Temperature,
-        UsagePercentage,
-        PowerDrawWatts,
-        FrequencyHz,
-        VideoMemoryFrequencyHz
-    }
-
-    public static class Extensions
-    {
-        public static PartType? ToPartType(this HardwareType hardwareType)
-        {
-            switch (hardwareType)
-            {
-                case HardwareType.GpuAti:
-                case HardwareType.GpuNvidia:
-                    return PartType.GraphicsCard;
-                case HardwareType.CPU:
-                    return PartType.Processor;
-                case HardwareType.RAM:
-                    return PartType.Memory;
-                default:
-                    return null;
-            }
-        }
-
-        public static MetricType? ToMetricType(this ISensor sensor)
-        {
-            var partType = sensor.Hardware.HardwareType.ToPartType();
-
-            switch (sensor.SensorType)
-            {
-                case SensorType.Temperature:
-                    return MetricType.Temperature;
-                case SensorType.Load:
-                    switch (partType)
-                    {
-                        case PartType.Processor:
-                            if (sensor.Name.Contains("CPU Package"))
-                            {
-                                return MetricType.UsagePercentage;
-                            }
-
-                            return null;
-                        default:
-                            return MetricType.UsagePercentage;
-                    }
-                case SensorType.Clock:
-                    switch (partType)
-                    {
-                        case PartType.GraphicsCard:
-                            if (sensor.Name.Contains("Core"))
-                            {
-                                return MetricType.FrequencyHz;
-                            }
-
-                            if (sensor.Name.Contains("Memory"))
-                            {
-                                return MetricType.VideoMemoryFrequencyHz;
-                            }
-
-                            return null;
-                        case PartType.Processor:
-                            if (sensor.Name.Contains("CPU Package"))
-                            {
-                                return MetricType.FrequencyHz;
-                            }
-
-                            return null;
-                        case PartType.Memory:
-                            return MetricType.FrequencyHz;
-                        default:
-                            return null;
-                    }
-                case SensorType.Power:
-                    switch (partType)
-                    {
-                        case PartType.Processor:
-                            if (sensor.Name.Contains("CPU Package"))
-                            {
-                                return MetricType.PowerDrawWatts;
-                            }
-
-                            return null;
-                        default:
-                            return MetricType.PowerDrawWatts;
-                    }
-                default:
-                    return null;
-            }
-        }
-    }
-    public class Container
-    {
-        public Dictionary<PartType, Dictionary<MetricType, float>> Data = new Dictionary<PartType, Dictionary<MetricType, float>>();
-
-        public Container()
-        {
-            foreach (var part in (PartType[])Enum.GetValues(typeof(PartType)))
-            {
-                Data.Add(part, GetMetricsForPart(part));
-            }
-        }
-
-        private static Dictionary<MetricType, float> GetMetricsForPart(PartType part)
-        {
-            var result = new Dictionary<MetricType, float>
-            {
-                { MetricType.Temperature, 0 },
-                { MetricType.UsagePercentage, 0 },
-                { MetricType.FrequencyHz, 0 }
-            };
-
-            switch (part)
-            {
-                case PartType.Processor:
-                    result.Add(MetricType.PowerDrawWatts, 0);
-                    break;
-                case PartType.GraphicsCard:
-                    result.Add(MetricType.PowerDrawWatts, 0);
-                    result.Add(MetricType.VideoMemoryFrequencyHz, 0);
-                    break;
-            }
-
-            return result;
-        }
-    }
     public partial class EspMon : Form
 	{
+        float cpuUsage;
+        float gpuUsage;
+        float cpuTemp;
+        float gpuTemp;
+        float cpuSpeed;
+        float gpuSpeed;
+
         private SerialPort _port;
-        private readonly Container _container = new Container();
         private readonly Computer _computer = new Computer
 		{
 			CPUEnabled = true,
-			GPUEnabled = true,
-            RAMEnabled = true
+			GPUEnabled = true
 		};
 		public EspMon()
 		{
@@ -214,29 +88,70 @@ namespace EspMon
 		{
             CollectSystemInfo();
 		}
+
+
         void CollectSystemInfo()
         {
             foreach (var hardware in _computer.Hardware)
             {
-                var partType = hardware.HardwareType.ToPartType();
 
-                if (partType == null)
+                if (hardware.HardwareType == HardwareType.CPU)
                 {
-                    continue;
+                    // only fire the update when found
+                    hardware.Update();
+
+                    // loop through the data
+                    foreach (var sensor in hardware.Sensors)
+                        if (sensor.SensorType == SensorType.Temperature && sensor.Name.Contains("CPU Package"))
+                        {
+                            // store
+                            cpuTemp = sensor.Value.GetValueOrDefault();
+
+                        }
+                        else if (sensor.SensorType == SensorType.Load && sensor.Name.Contains("CPU Total"))
+                        {
+                            // store
+                            cpuUsage = sensor.Value.GetValueOrDefault();
+                        }
+                        else if (sensor.SensorType == SensorType.Clock && sensor.Name.Contains("CPU Core #1"))
+                        {
+                            // store
+                            cpuSpeed = sensor.Value.GetValueOrDefault();
+                        }
                 }
 
-                hardware.Update();
 
-                foreach (var sensor in hardware.Sensors)
+                // Targets AMD & Nvidia GPUS
+                if (hardware.HardwareType == HardwareType.GpuAti || hardware.HardwareType == HardwareType.GpuNvidia)
                 {
-                    var metricType = sensor.ToMetricType();
+                    // only fire the update when found
+                    hardware.Update();
 
-                    if (metricType != null)
-                    {
-                        _container.Data[partType.Value][metricType.Value] = sensor.Value.GetValueOrDefault();
-                    }
+                    // loop through the data
+                    foreach (var sensor in hardware.Sensors)
+                        if (sensor.SensorType == SensorType.Temperature && sensor.Name.Contains("GPU Core"))
+                        {
+                            // store
+                            gpuTemp = sensor.Value.GetValueOrDefault();
+                         }
+                        else if (sensor.SensorType == SensorType.Load && sensor.Name.Contains("GPU Core"))
+                        {
+                            // store
+                            gpuUsage = sensor.Value.GetValueOrDefault();
+                        }
+                        else if (sensor.SensorType == SensorType.Clock && sensor.Name.Contains("GPU Core"))
+                        {
+                            // store
+                            gpuSpeed = sensor.Value.GetValueOrDefault();
+                        }
+                        
                 }
+
+                // ... you can access any other system information you want here
+
             }
+        
+     
         }
 
         private void PortCombo_SelectedIndexChanged(object sender, EventArgs e)
@@ -274,31 +189,48 @@ namespace EspMon
                     _port.Read(cha, 0, cha.Length);
                     if ((char)cha[0] == '#')
                     {
-                        var ba = BitConverter.GetBytes(_container.Data[PartType.Processor][MetricType.UsagePercentage]);
+                        var ba = BitConverter.GetBytes(cpuUsage);
                         if(!BitConverter.IsLittleEndian)
 						{
                             Array.Reverse(ba);
 						}
                         _port.Write(ba, 0, ba.Length);
-                        ba = BitConverter.GetBytes(_container.Data[PartType.Processor][MetricType.Temperature]);
+                        ba = BitConverter.GetBytes(cpuTemp);
                         if (!BitConverter.IsLittleEndian)
                         {
                             Array.Reverse(ba);
                         }
                         _port.Write(ba, 0, ba.Length);
-                        ba = BitConverter.GetBytes(_container.Data[PartType.GraphicsCard][MetricType.UsagePercentage]);
+                        ba = BitConverter.GetBytes(gpuUsage);
                         if (!BitConverter.IsLittleEndian)
                         {
                             Array.Reverse(ba);
                         }
                         _port.Write(ba, 0, ba.Length);
-                        ba = BitConverter.GetBytes(_container.Data[PartType.GraphicsCard][MetricType.Temperature]);
+                        //System.Diagnostics.Debug.WriteLine(_container.Data[PartType.GraphicsCard][MetricType.Temperature]);
+                        ba = BitConverter.GetBytes(gpuTemp);
                         if (!BitConverter.IsLittleEndian)
                         {
                             Array.Reverse(ba);
                         }
                         _port.Write(ba, 0, ba.Length);
                         _port.BaseStream.Flush();
+                    } else if((char)cha[0]=='@')
+					{
+                        var ba = BitConverter.GetBytes(cpuSpeed);
+                        System.Diagnostics.Debug.WriteLine(cpuSpeed);
+
+                        if (!BitConverter.IsLittleEndian)
+                        {
+                            Array.Reverse(ba);
+                        }
+                        _port.Write(ba, 0, ba.Length);
+                        ba = BitConverter.GetBytes(gpuSpeed);
+                        if (!BitConverter.IsLittleEndian)
+                        {
+                            Array.Reverse(ba);
+                        }
+                        _port.Write(ba, 0, ba.Length);
                     }
                 }
             }
