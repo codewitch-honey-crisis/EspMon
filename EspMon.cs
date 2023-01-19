@@ -7,12 +7,27 @@ using System.Collections.Generic;
 using System.Management;
 using System.Diagnostics;
 using System.Linq;
+using static EspMon.EspMon;
 
 namespace EspMon
 {
     public partial class EspMon : Form
 	{
-        float cpuUsage;
+		public class UpdateVisitor : IVisitor
+		{
+			public void VisitComputer(IComputer computer)
+			{
+				computer.Traverse(this);
+			}
+			public void VisitHardware(IHardware hardware)
+			{
+				hardware.Update();
+				foreach (IHardware subHardware in hardware.SubHardware) subHardware.Accept(this);
+			}
+			public void VisitSensor(ISensor sensor) { }
+			public void VisitParameter(IParameter parameter) { }
+		}
+		float cpuUsage;
         float gpuUsage;
         float cpuTemp;
         float gpuTemp;
@@ -59,24 +74,7 @@ namespace EspMon
 					}
 				}
 			}
-            var s = new SerialPort((string)PortCombo.Items[idx]);
-            if (!s.IsOpen)
-            {
-                try
-                {
-                    s.Open();
-                    s.Close();
-                }
-                catch
-                {
-                    --idx;
-                    if (0 > idx)
-                    {
-                        idx = PortCombo.Items.Count - 1;
-                    }
-                }
-            }
-			PortCombo.SelectedIndex = idx;
+            PortCombo.SelectedIndex = 0;
 		}
 
 		private void RefreshButton_Click(object sender, EventArgs e)
@@ -92,7 +90,56 @@ namespace EspMon
 
         void CollectSystemInfo()
         {
-            foreach (var hardware in _computer.Hardware)
+            var updateVisitor = new UpdateVisitor();
+			_computer.Accept(updateVisitor);
+			for (int i = 0; i < _computer.Hardware.Length; i++)
+			{
+				if (_computer.Hardware[i].HardwareType == HardwareType.CPU)
+				{
+					for (int j = 0; j < _computer.Hardware[i].Sensors.Length; j++)
+					{
+                        var sensor = _computer.Hardware[i].Sensors[j];
+						if (sensor.SensorType == SensorType.Temperature)
+                        {
+							cpuTemp = sensor.Value.GetValueOrDefault();
+						}
+						else if (sensor.SensorType == SensorType.Load && sensor.Name.Contains("CPU Total"))
+						{
+							// store
+							cpuUsage = sensor.Value.GetValueOrDefault();
+						}
+						else if (sensor.SensorType == SensorType.Clock && sensor.Name.Contains("CPU Core #1"))
+						{
+							// store
+							cpuSpeed = sensor.Value.GetValueOrDefault();
+						}
+					}
+				}
+				if (_computer.Hardware[i].HardwareType == HardwareType.GpuAti || _computer.Hardware[i].HardwareType == HardwareType.GpuNvidia)
+				{
+					for (int j = 0; j < _computer.Hardware[i].Sensors.Length; j++)
+					{
+						var sensor = _computer.Hardware[i].Sensors[j];
+						if (sensor.SensorType == SensorType.Temperature && sensor.Name.Contains("GPU Core"))
+						{
+							// store
+							gpuTemp = sensor.Value.GetValueOrDefault();
+						}
+						else if (sensor.SensorType == SensorType.Load && sensor.Name.Contains("GPU Core"))
+						{
+							// store
+							gpuUsage = sensor.Value.GetValueOrDefault();
+						}
+						else if (sensor.SensorType == SensorType.Clock && sensor.Name.Contains("GPU Core"))
+						{
+							// store
+							gpuSpeed = sensor.Value.GetValueOrDefault();
+						}
+
+					}
+				}
+			}
+			/*foreach (var hardware in _computer.Hardware)
             {
 
                 if (hardware.HardwareType == HardwareType.CPU)
@@ -149,7 +196,7 @@ namespace EspMon
 
                 // ... you can access any other system information you want here
 
-            }
+            }*/
         
      
         }
